@@ -85,6 +85,11 @@ import {
   EmptyStateText,
   CategoryIcon,
   TransactionPaid,
+  TransactionsTableMobile,
+  TransactionsList,
+  TransactionItem,
+  TransactionMobileDate,
+  TransactionMobileDateLabel,
 } from './styles';
 import { AddIncomeModal } from '@/components/AddIncomeModal';
 import { AddExpenseModal } from '@/components/AddExpenseModal';
@@ -881,6 +886,132 @@ export function Transactions() {
               )}
             </tbody>
           </TransactionsTable>
+
+          <TransactionsTableMobile>
+            {isLoading ? (
+              <>
+                {[...Array(10)].map((_, index) => (
+                  <TransactionItem key={`skeleton-${index}`}>
+                    <Skeleton className="h-10 w-10 rounded-full" />
+                    <div className="flex flex-col gap-2 flex-1">
+                      <div className="flex gap-2">
+                        <div className="flex flex-col gap-2">
+                          <Skeleton className="h-4 w-32" />
+                          <Skeleton className="h-4 w-24" />
+                        </div>
+                      </div>
+                      <div className="flex flex-col gap-2">
+                        <Skeleton className="h-3 w-20" />
+                        <Skeleton className="h-3 w-20" />
+                      </div>
+                    </div>
+                    <div className="flex items-start gap-2">
+                      <div className="flex flex-col self-start gap-2">
+                        <Skeleton className="h-4 w-16" />
+                        <Skeleton className="h-4 w-20" />
+                      </div>
+                      <Skeleton className="h-8 w-8 rounded" />
+                    </div>
+                  </TransactionItem>
+                ))}
+              </>
+            ) : transactions.length > 0 ? (
+              <TransactionsList>
+                {transactions.map((transaction) => (
+                  <TransactionItem key={transaction.id}>
+                    <CategoryIcon>
+                      <IconRenderer
+                        iconName={transaction.categoryIcon}
+                        size={20}
+                        color="currentColor"
+                        fallback={<span>📁</span>}
+                      />
+                    </CategoryIcon>
+                    <div className="flex flex-col gap-2 flex-1">
+                      <div className="flex gap-2">
+                        <div className="flex flex-col">
+                          <TransactionDescription>
+                            {transaction.description}
+                          </TransactionDescription>
+                          <TransactionMethod>
+                            {transaction.category}
+                          </TransactionMethod>
+                        </div>
+                      </div>
+                      <TransactionMobileDate>
+                        {transaction.type === 'expense' && transaction.purchaseDate && (
+                          <>
+                            <TransactionMobileDateLabel>Data de Compra</TransactionMobileDateLabel>
+                            <TransactionDate>{transaction.purchaseDate}</TransactionDate>
+                          </>
+                        )}
+                        <TransactionMobileDateLabel>Data de Vencimento</TransactionMobileDateLabel>
+                        <TransactionDate>{transaction.date}</TransactionDate>
+                      </TransactionMobileDate>
+                    </div>
+
+                    <div className="flex items-start gap-2">
+                      <div className="flex flex-col self-start">
+                        <TransactionAmount $type={transaction.type}>
+                          {transaction.type === 'income' ? '+' : '-'}
+                          {new Intl.NumberFormat('pt-BR', {
+                            style: 'currency',
+                            currency: 'BRL',
+                          }).format(Math.abs(transaction.amount))}
+                        </TransactionAmount>
+
+                        {transaction.type === 'expense' && (
+                          <TransactionPaid $is_paid={transaction.is_paid} $type={transaction.type}>
+                            <span>Pago:</span> {transaction.is_paid ? 'Sim' : 'Não'}
+                          </TransactionPaid>
+                        )}
+                      </div>
+
+                      <DropdownMenu>
+                        <DropdownMenuTrigger asChild>
+                          <TransactionActions
+                            type="button"
+                            aria-label="Mais opções"
+                          >
+                            <MoreVertical size={20} />
+                          </TransactionActions>
+                        </DropdownMenuTrigger>
+                        <DropdownMenuContent align="end">
+                          <DropdownMenuItem
+                            onClick={() =>
+                              transaction.type === 'income'
+                                ? handleEditIncome(transaction.id)
+                                : handleEditExpense(transaction.id)
+                            }
+                          >
+                            <Pencil className="mr-2 h-4 w-4" />
+                            Editar
+                          </DropdownMenuItem>
+                          <DropdownMenuItem
+                            variant="destructive"
+                            onClick={() =>
+                              transaction.type === 'income'
+                                ? handleDeleteIncome(transaction.id)
+                                : handleDeleteExpense(transaction.id)
+                            }
+                          >
+                            <Trash2 className="mr-2 h-4 w-4" />
+                            Excluir
+                          </DropdownMenuItem>
+                        </DropdownMenuContent>
+                      </DropdownMenu>
+                    </div>
+                  </TransactionItem>
+                ))}
+              </TransactionsList>
+            ) : (
+              <EmptyStateText>
+                {hasActiveFilters
+                  ? 'Nenhuma transação encontrada com os filtros selecionados'
+                  : 'Nenhuma transação encontrada'}
+              </EmptyStateText>
+            )}
+          </TransactionsTableMobile>
         </TransactionsContent>
       </TransactionsMain>
       <AddIncomeModal

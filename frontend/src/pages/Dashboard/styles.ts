@@ -662,7 +662,6 @@ export const TransactionsList = styled.ul`
 
 export const TransactionItem = styled.li`
   display: flex;
-  align-items: center;
   gap: 0.75rem;
   border-top: 0.0625rem solid ${(props) => props.theme.border};
   padding-top: 0.5rem;

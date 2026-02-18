@@ -1,15 +1,26 @@
-import { useEffect, useState, useCallback, useMemo } from 'react';
+import { useEffect, useState, useCallback } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { formatCurrency, formatDate, formatMonthYear, formatPercentage } from '../../utils/formatters';
+import { format } from 'date-fns';
+import { ptBR } from 'date-fns/locale';
+import type { DateRange as PickerDateRange } from 'react-day-picker';
 import {
-  Line,
-  AreaChart,
-  Area,
+  Calendar as CalendarIcon,
+  TrendingUp,
+  TrendingDown,
+  X,
+  AlertTriangle,
+  Info,
+  CheckCircle,
+  AlertCircle,
+} from 'lucide-react';
+import {
+  PieChart,
+  Pie,
+  Cell,
   BarChart,
   Bar,
   XAxis,
   YAxis,
-  CartesianGrid,
   Tooltip,
   Legend,
   ResponsiveContainer,
@@ -17,890 +28,768 @@ import {
 import { useAuth } from '../../contexts/AuthContext';
 import { useTheme } from '../../contexts/ThemeContext';
 import { Header } from '../../components/Header';
+import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Skeleton } from '@/components/ui/skeleton';
-import { incomesService } from '../../services/incomes.service';
-import { IconRenderer } from '../../utils/iconMapper';
+import { Calendar } from '@/components/ui/calendar';
+import {
+  Popover,
+  PopoverContent,
+  PopoverTrigger,
+} from '@/components/ui/popover';
+import {
+  analyticsService,
+  type AnalyticsPeriod,
+  type CategoryStats,
+  type AggregatedPeriod,
+  type Insight,
+} from '../../services/analytics.service';
 import {
   AnalyticsWrapper,
   AnalyticsMain,
   AnalyticsContent,
   PageTitle,
-  Section,
-  SectionTitle,
-  SectionDescription,
+  FilterSection,
   PeriodSelector,
   PeriodButton,
-  Card,
+  PeriodSelectWrapper,
+  DatePickerTriggerButton,
+  ClearDateRangeButton,
+  StatsGrid,
+  ChartSection,
+  SectionTitle,
+  ChartsGrid,
+  ChartCard,
+  ChartCardFull,
   ChartContainer,
-  InsightCard,
-  InsightText,
-  Table,
-  TableHeader,
-  TableRow,
-  TableCell,
-  TableHeaderCell,
-  HealthScoreCard,
-  ScoreValue,
-  ScoreLabel,
-  ScoreDetails,
-  ScoreDetailItem,
+  InsightsSection,
   InsightsList,
-  InsightItem,
-  HeatmapContainer,
-  HeatmapDay,
-  HeatmapLabel,
-  RecurringExpenseItem,
-  RecurringExpenseName,
-  RecurringExpenseDetails,
-  ComparisonCardsGrid,
-  ComparisonCard,
-  ComparisonLabel,
-  ComparisonValue,
-  ComparisonChange,
-  VillainsList,
-  CategoryCellContent,
-  TableCellWithColor,
-  InsightCardWithMargin,
-  WarningText,
-  HeatmapSection,
-  HeatmapSectionTitle,
-  HeatmapDayContainer,
+  InsightCard,
+  CustomTooltipContainer,
+  TooltipLabel,
+  TooltipValue,
 } from './styles';
 
-type EvolutionPeriod = '6-months' | '12-months' | 'this-year' | 'last-year';
+function CustomPieTooltip({ active, payload, theme }: { active?: boolean; payload?: any[]; theme: 'light' | 'dark' }) {
+  if (active && payload && payload.length) {
+    const data = payload[0];
+    const name = data.name;
+    const value = data.value;
+    const percent = ((data.payload.percent ?? 0) * 100).toFixed(0);
+
+    return (
+      <CustomTooltipContainer $isDark={theme === 'dark'}>
+        <TooltipLabel>{name}</TooltipLabel>
+        <TooltipValue>
+          {new Intl.NumberFormat('pt-BR', {
+            style: 'currency',
+            currency: 'BRL',
+          }).format(value)} ({percent}%)
+        </TooltipValue>
+      </CustomTooltipContainer>
+    );
+  }
+  return null;
+}
+
+const PeriodSelectButton = PeriodButton;
 
 export function Analytics() {
   const navigate = useNavigate();
-  const { isAuthenticated, isLoading } = useAuth();
+  const { isAuthenticated, isLoading: authLoading } = useAuth();
   const { theme } = useTheme();
 
-  const [evolutionPeriod, setEvolutionPeriod] =
-    useState<EvolutionPeriod>('12-months');
-  const [monthlyEvolution, setMonthlyEvolution] = useState<
-    Array<{
-      month: string;
-      income: number;
-      expense: number;
-      balance: number;
-    }>
-  >([]);
-  const [categoryAnalysis, setCategoryAnalysis] = useState<
-    Array<{
-      category: string;
-      averageMonthly: number;
-      lastMonth: number;
-      variation: number;
-      mostExpensiveMonth: { month: string; value: number };
-      icon: string | null;
-      color: string;
-    }>
-  >([]);
-  const [recurringExpenses, setRecurringExpenses] = useState<
-    Array<{
-      name: string;
-      amount: number;
-      frequency: string;
-      annualImpact: number;
-      category: string;
-    }>
-  >([]);
-  const [incomeSources, setIncomeSources] = useState<{
-    sources: Array<{
-      category: string;
-      name: string | null;
-      sourceLabel: string;
-      total: number;
-      percentage: number;
-      count: number;
-    }>;
-    totalIncome: number;
-    mainSourcePercentage: number;
-    sourceCount: number;
-  } | null>(null);
-  const [consumptionPattern, setConsumptionPattern] = useState<{
-    byDayOfWeek: Array<{ day: string; total: number; count: number }>;
-    byDayOfMonth: Array<{ day: number; total: number; count: number }>;
-  } | null>(null);
-  const [financialHealth, setFinancialHealth] = useState<{
-    score: number;
-    details: {
-      expenseRatio: number;
-      positiveMonths: number;
-      positiveMonthsPercentage: number;
-      recurringExpenseRatio: number;
-    };
-    insights: string[];
-  } | null>(null);
-  const [periodComparison, setPeriodComparison] = useState<{
-    current: {
-      income: number;
-      expense: number;
-      balance: number;
-    };
-    previous: {
-      income: number;
-      expense: number;
-      balance: number;
-    };
-    changes: {
-      incomeChange: number;
-      expenseChange: number;
-      balanceChange: number;
-    };
-  } | null>(null);
-  const [budgetSuggestion, setBudgetSuggestion] = useState<{
-    categories: Array<{
-      category: string;
-      suggestedBudget: number;
-      currentSpent: number;
-      difference: number;
-      percentage: number;
-    }>;
-    totalSuggested: number;
-    totalSpent: number;
-    totalDifference: number;
-  } | null>(null);
-  const [topVillains, setTopVillains] = useState<{
-    biggestCategoryIncrease: {
-      category: string;
-      current: number;
-      previous: number;
-      increase: number;
-    } | null;
-    heaviestRecurringExpense: {
-      name: string;
-      amount: number;
-      annualImpact: number;
-      category: string;
-    } | null;
-    biggestSingleExpense: {
-      name: string | null;
-      category: string;
-      amount: number;
-      date: string;
-    } | null;
-  } | null>(null);
+  const [selectedPeriod, setSelectedPeriod] = useState<AnalyticsPeriod>('month');
+  const [dateRange, setDateRange] = useState<PickerDateRange | undefined>(
+    undefined
+  );
 
-  const [isLoadingData, setIsLoadingData] = useState(true);
+  const rangeForApi =
+    dateRange?.from && dateRange?.to
+      ? { from: dateRange.from, to: dateRange.to }
+      : undefined;
+
+  const [stats, setStats] = useState<{
+    income: number;
+    expense: number;
+    balance: number;
+    incomeChange: number;
+    expenseChange: number;
+    balanceChange: number;
+  }>({
+    income: 0,
+    expense: 0,
+    balance: 0,
+    incomeChange: 0,
+    expenseChange: 0,
+    balanceChange: 0,
+  });
+  const [categories, setCategories] = useState<CategoryStats[]>([]);
+  const [timeSeriesData, setTimeSeriesData] = useState<AggregatedPeriod[]>([]);
+  const [monthlyComparison, setMonthlyComparison] = useState<AggregatedPeriod[]>([]);
+  const [investmentData, setInvestmentData] = useState<{
+    totalInvested: number;
+    totalValue: number;
+    totalProfit: number;
+    profitPercentage: number;
+    evolution: Array<{ month: string; portfolioValue: number }>;
+    byAssetClass: Array<{ name: string; value: number }>;
+  } | null>(null);
+  const [insights, setInsights] = useState<Insight[]>([]);
+
+  const [isLoadingStats, setIsLoadingStats] = useState(false);
+  const [isLoadingCategories, setIsLoadingCategories] = useState(false);
+  const [isLoadingTimeSeries, setIsLoadingTimeSeries] = useState(false);
+  const [isLoadingMonthly, setIsLoadingMonthly] = useState(false);
+  const [isLoadingInvestments, setIsLoadingInvestments] = useState(false);
+  const [isLoadingInsights, setIsLoadingInsights] = useState(false);
 
   useEffect(() => {
-    if (!isLoading && !isAuthenticated) {
+    if (!authLoading && !isAuthenticated) {
       navigate('/login');
     }
-  }, [isAuthenticated, isLoading, navigate]);
+  }, [isAuthenticated, authLoading, navigate]);
 
-  const loadMonthlyEvolution = useCallback(async () => {
+  const loadStats = useCallback(async () => {
+    if (!isAuthenticated) return;
+    setIsLoadingStats(true);
     try {
-      const months =
-        evolutionPeriod === '6-months'
-          ? 6
-          : evolutionPeriod === '12-months'
-            ? 12
-            : evolutionPeriod === 'this-year'
-              ? new Date().getMonth() + 1
-              : 12;
-      const response = await incomesService.getMonthlyEvolution(months);
-      const data = response.data.map((item) => ({
-        ...item,
-        month: formatMonthYear(item.month),
-      }));
-      setMonthlyEvolution(data);
-    } catch (error) {
-      console.error('Erro ao carregar evolução mensal:', error);
+      const data = await analyticsService.fetchStats(selectedPeriod, rangeForApi);
+      setStats(data);
+    } catch (e) {
+      console.error('Erro ao carregar estatísticas:', e);
+    } finally {
+      setIsLoadingStats(false);
     }
-  }, [evolutionPeriod]);
+  }, [isAuthenticated, selectedPeriod, rangeForApi]);
 
-  const loadCategoryAnalysis = useCallback(async () => {
+  const loadCategories = useCallback(async () => {
+    if (!isAuthenticated) return;
+    setIsLoadingCategories(true);
     try {
-      const response = await incomesService.getCategoryExpenseAnalysis(6);
-      setCategoryAnalysis(response.data);
-    } catch (error) {
-      console.error('Erro ao carregar análise de categorias:', error);
+      const data = await analyticsService.fetchExpensesByCategory(
+        selectedPeriod,
+        rangeForApi
+      );
+      setCategories(data);
+    } catch (e) {
+      console.error('Erro ao carregar categorias:', e);
+      setCategories([]);
+    } finally {
+      setIsLoadingCategories(false);
     }
-  }, []);
+  }, [isAuthenticated, selectedPeriod, rangeForApi]);
 
-  const loadRecurringExpenses = useCallback(async () => {
+  const loadTimeSeries = useCallback(async () => {
+    if (!isAuthenticated) return;
+    setIsLoadingTimeSeries(true);
     try {
-      const response = await incomesService.getRecurringExpenses();
-      setRecurringExpenses(response.data);
-    } catch (error) {
-      console.error('Erro ao carregar gastos recorrentes:', error);
+      const granularity = selectedPeriod === 'week' ? 'week' : 'month';
+      const data = await analyticsService.fetchTimeSeriesData(
+        selectedPeriod,
+        rangeForApi,
+        granularity
+      );
+      setTimeSeriesData(data);
+    } catch (e) {
+      console.error('Erro ao carregar série temporal:', e);
+      setTimeSeriesData([]);
+    } finally {
+      setIsLoadingTimeSeries(false);
     }
-  }, []);
+  }, [isAuthenticated, selectedPeriod, rangeForApi]);
 
-  const loadIncomeSources = useCallback(async () => {
+  const loadMonthlyComparison = useCallback(async () => {
+    if (!isAuthenticated) return;
+    setIsLoadingMonthly(true);
     try {
-      const response = await incomesService.getIncomeSourcesAnalysis();
-      setIncomeSources(response.data);
-    } catch (error) {
-      console.error('Erro ao carregar fontes de receita:', error);
+      const data = await analyticsService.fetchMonthlyComparison(6);
+      setMonthlyComparison(data);
+    } catch (e) {
+      console.error('Erro ao carregar comparação mensal:', e);
+      setMonthlyComparison([]);
+    } finally {
+      setIsLoadingMonthly(false);
     }
-  }, []);
+  }, [isAuthenticated]);
 
-  const loadConsumptionPattern = useCallback(async () => {
+  const loadInvestments = useCallback(async () => {
+    if (!isAuthenticated) return;
+    setIsLoadingInvestments(true);
     try {
-      const response = await incomesService.getConsumptionPattern(3);
-      setConsumptionPattern(response.data);
-    } catch (error) {
-      console.error('Erro ao carregar padrão de consumo:', error);
+      const data = await analyticsService.fetchInvestmentData();
+      setInvestmentData({
+        totalInvested: data.totalInvested,
+        totalValue: data.totalValue,
+        totalProfit: data.totalProfit,
+        profitPercentage: data.profitPercentage,
+        evolution: data.evolution,
+        byAssetClass: data.byAssetClass,
+      });
+    } catch (e) {
+      console.error('Erro ao carregar investimentos:', e);
+      setInvestmentData(null);
+    } finally {
+      setIsLoadingInvestments(false);
     }
-  }, []);
+  }, [isAuthenticated, selectedPeriod, rangeForApi]);
 
-  const loadFinancialHealth = useCallback(async () => {
+  const loadInsights = useCallback(async () => {
+    if (!isAuthenticated) return;
+    setIsLoadingInsights(true);
     try {
-      const response = await incomesService.getFinancialHealthScore();
-      setFinancialHealth(response.data);
-    } catch (error) {
-      console.error('Erro ao carregar saúde financeira:', error);
+      const data = await analyticsService.generateInsights(
+        selectedPeriod,
+        rangeForApi
+      );
+      setInsights(data);
+    } catch (e) {
+      console.error('Erro ao gerar insights:', e);
+      setInsights([]);
+    } finally {
+      setIsLoadingInsights(false);
     }
-  }, []);
+  }, [isAuthenticated, selectedPeriod, rangeForApi]);
 
-  const loadPeriodComparison = useCallback(async () => {
-    try {
-      const response = await incomesService.getPeriodComparison();
-      setPeriodComparison(response.data);
-    } catch (error) {
-      console.error('Erro ao carregar comparação de períodos:', error);
-    }
-  }, []);
-
-  const loadBudgetSuggestion = useCallback(async () => {
-    try {
-      const response = await incomesService.getBudgetSuggestion();
-      setBudgetSuggestion(response.data);
-    } catch (error) {
-      console.error('Erro ao carregar sugestão de orçamento:', error);
-    }
-  }, []);
-
-  const loadTopVillains = useCallback(async () => {
-    try {
-      const response = await incomesService.getTopVillains();
-      setTopVillains(response.data);
-    } catch (error) {
-      console.error('Erro ao carregar top vilões:', error);
-    }
-  }, []);
-
-  const loadAllData = useCallback(async () => {
-    setIsLoadingData(true);
-    await Promise.all([
-      loadMonthlyEvolution(),
-      loadCategoryAnalysis(),
-      loadRecurringExpenses(),
-      loadIncomeSources(),
-      loadConsumptionPattern(),
-      loadFinancialHealth(),
-      loadPeriodComparison(),
-      loadBudgetSuggestion(),
-      loadTopVillains(),
-    ]);
-    setIsLoadingData(false);
+  useEffect(() => {
+    if (!isAuthenticated) return;
+    void loadStats();
+    void loadCategories();
+    void loadTimeSeries();
+    void loadInsights();
   }, [
-    loadMonthlyEvolution,
-    loadCategoryAnalysis,
-    loadRecurringExpenses,
-    loadIncomeSources,
-    loadConsumptionPattern,
-    loadFinancialHealth,
-    loadPeriodComparison,
-    loadBudgetSuggestion,
-    loadTopVillains,
+    isAuthenticated,
+    loadStats,
+    loadCategories,
+    loadTimeSeries,
+    loadInsights,
   ]);
 
   useEffect(() => {
-    if (isAuthenticated) {
-      void loadAllData();
-    }
-  }, [isAuthenticated, loadAllData]);
+    if (!isAuthenticated) return;
+    void loadMonthlyComparison();
+  }, [isAuthenticated, loadMonthlyComparison]);
 
   useEffect(() => {
-    if (isAuthenticated) {
-      void loadMonthlyEvolution();
-    }
-  }, [isAuthenticated, loadMonthlyEvolution]);
+    if (!isAuthenticated) return;
+    void loadInvestments();
+  }, [isAuthenticated, loadInvestments]);
 
-  // Calcular insights automáticos (memoizados) - ANTES de qualquer retorno condicional
-  const positiveMonths = useMemo(() => {
-    return monthlyEvolution.filter((m) => m.balance > 0).length;
-  }, [monthlyEvolution]);
+  const currencyFormatter = new Intl.NumberFormat('pt-BR', {
+    style: 'currency',
+    currency: 'BRL',
+  });
 
-  const totalMonths = useMemo(() => {
-    return monthlyEvolution.length;
-  }, [monthlyEvolution]);
+  // Filtrar investimentos dos gráficos de gastos (mostrar separadamente)
+  const expensesCategories = categories.filter((c) => c.name !== 'Investimentos');
+  
+  const pieData = expensesCategories.map((c) => ({ name: c.name, value: c.value }));
 
-  const positiveMonthsPercentage = useMemo(() => {
-    return totalMonths > 0 ? (positiveMonths / totalMonths) * 100 : 0;
-  }, [positiveMonths, totalMonths]);
-
-  if (isLoading) {
+  if (authLoading) {
     return null;
   }
-
-  const getScoreColor = (score: number) => {
-    if (score >= 80) return '#4ade80';
-    if (score >= 60) return '#f59e0b';
-    return '#ef4444';
-  };
-
-  const getScoreLabel = (score: number) => {
-    if (score >= 80) return 'Excelente';
-    if (score >= 60) return 'Bom';
-    if (score >= 40) return 'Regular';
-    return 'Ruim';
-  };
 
   return (
     <AnalyticsWrapper $theme={theme}>
       <Header />
       <AnalyticsMain>
         <AnalyticsContent>
-          <PageTitle>Análises</PageTitle>
+          <PageTitle id="analytics-title">Análises</PageTitle>
 
-          {/* 1. Evolução Financeira no Tempo */}
-          <Section>
-            <SectionTitle>Evolução Financeira no Tempo</SectionTitle>
-            <SectionDescription>
-              Acompanhe sua evolução financeira ao longo do tempo
-            </SectionDescription>
-            <PeriodSelector>
+          <FilterSection aria-label="Filtro de período">
+            <PeriodSelector role="group" aria-label="Período">
               <PeriodButton
                 type="button"
-                $active={evolutionPeriod === '6-months'}
-                onClick={() => setEvolutionPeriod('6-months')}
+                $active={selectedPeriod === 'month'}
+                onClick={() => {
+                  setSelectedPeriod('month');
+                  setDateRange(undefined);
+                }}
               >
-                Últimos 6 meses
+                Este mês
               </PeriodButton>
               <PeriodButton
                 type="button"
-                $active={evolutionPeriod === '12-months'}
-                onClick={() => setEvolutionPeriod('12-months')}
+                $active={selectedPeriod === 'year'}
+                onClick={() => {
+                  setSelectedPeriod('year');
+                  setDateRange(undefined);
+                }}
               >
-                Últimos 12 meses
+                Este ano
               </PeriodButton>
-              <PeriodButton
-                type="button"
-                $active={evolutionPeriod === 'this-year'}
-                onClick={() => setEvolutionPeriod('this-year')}
-              >
-                Ano atual
-              </PeriodButton>
-              <PeriodButton
-                type="button"
-                $active={evolutionPeriod === 'last-year'}
-                onClick={() => setEvolutionPeriod('last-year')}
-              >
-                Ano anterior
-              </PeriodButton>
+              <PeriodSelectWrapper>
+                <Popover>
+                  <PopoverTrigger asChild>
+                    <DatePickerTriggerButton type="button">
+                      <PeriodSelectButton
+                        type="button"
+                        $active={
+                          selectedPeriod === 'custom' &&
+                          !!dateRange?.from &&
+                          !!dateRange?.to
+                        }
+                      >
+                        <CalendarIcon size={16} aria-hidden />
+                        {dateRange?.from && dateRange?.to
+                          ? `${format(dateRange.from, 'dd/MM/yyyy', {
+                              locale: ptBR,
+                            })} - ${format(dateRange.to, 'dd/MM/yyyy', {
+                              locale: ptBR,
+                            })}`
+                          : 'Selecionar período'}
+                      </PeriodSelectButton>
+                    </DatePickerTriggerButton>
+                  </PopoverTrigger>
+                  <PopoverContent className="w-auto p-0" align="start">
+                    <Calendar
+                      mode="range"
+                      selected={dateRange}
+                      onSelect={(range) => {
+                        setDateRange(range);
+                        if (range?.from && range?.to) {
+                          setSelectedPeriod('custom');
+                        }
+                      }}
+                      locale={ptBR}
+                      numberOfMonths={2}
+                      initialFocus
+                    />
+                  </PopoverContent>
+                </Popover>
+                {dateRange?.from && dateRange?.to && (
+                  <ClearDateRangeButton
+                    type="button"
+                    onClick={() => setDateRange(undefined)}
+                    aria-label="Limpar filtro de datas"
+                  >
+                    <X size={16} aria-hidden />
+                  </ClearDateRangeButton>
+                )}
+              </PeriodSelectWrapper>
             </PeriodSelector>
-            {isLoadingData ? (
-              <Skeleton className="h-64 w-full" />
-            ) : (
-              <Card>
-                <ChartContainer>
-                  <ResponsiveContainer width="100%" height={300}>
-                    <AreaChart data={monthlyEvolution}>
-                      <CartesianGrid strokeDasharray="3 3" />
-                      <XAxis dataKey="month" />
-                      <YAxis />
-                      <Tooltip
-                        formatter={(value: number | undefined) =>
-                          value !== undefined ? formatCurrency(value) : ''
-                        }
-                      />
-                      <Legend />
-                      <Area
-                        type="monotone"
-                        dataKey="income"
-                        stackId="1"
-                        stroke="#4ade80"
-                        fill="#4ade80"
-                        name="Receitas"
-                      />
-                      <Area
-                        type="monotone"
-                        dataKey="expense"
-                        stackId="1"
-                        stroke="#ef4444"
-                        fill="#ef4444"
-                        name="Despesas"
-                      />
-                      <Line
-                        type="monotone"
-                        dataKey="balance"
-                        stroke="#3b82f6"
-                        strokeWidth={2}
-                        name="Resultado"
-                      />
-                    </AreaChart>
-                  </ResponsiveContainer>
-                </ChartContainer>
-                {totalMonths > 0 && (
-                  <InsightCard>
-                    <InsightText>
-                      Você fechou {positiveMonths} dos últimos {totalMonths}{' '}
-                      meses no positivo (
-                      {positiveMonthsPercentage.toFixed(0)}%)
-                    </InsightText>
-                  </InsightCard>
-                )}
-              </Card>
-            )}
-          </Section>
+          </FilterSection>
 
-          {/* 1.1 Comparação "Você vs Você mesmo" */}
-          <Section>
-            <SectionTitle>Você vs Você Mesmo</SectionTitle>
-            <SectionDescription>
-              Comparação deste mês com o mês anterior
-            </SectionDescription>
-            {isLoadingData ? (
-              <Skeleton className="h-32 w-full" />
-            ) : periodComparison ? (
-              <ComparisonCardsGrid>
-                <ComparisonCard>
-                  <ComparisonLabel>Receita</ComparisonLabel>
-                  <ComparisonValue>
-                    {formatCurrency(periodComparison.current.income)}
-                  </ComparisonValue>
-                  <ComparisonChange
-                    $isPositive={periodComparison.changes.incomeChange >= 0}
-                  >
-                    {formatPercentage(periodComparison.changes.incomeChange)}
-                  </ComparisonChange>
-                </ComparisonCard>
-                <ComparisonCard>
-                  <ComparisonLabel>Despesa</ComparisonLabel>
-                  <ComparisonValue>
-                    {formatCurrency(periodComparison.current.expense)}
-                  </ComparisonValue>
-                  <ComparisonChange
-                    $isPositive={periodComparison.changes.expenseChange <= 0}
-                  >
-                    {formatPercentage(periodComparison.changes.expenseChange)}
-                  </ComparisonChange>
-                </ComparisonCard>
-                <ComparisonCard>
-                  <ComparisonLabel>Saldo</ComparisonLabel>
-                  <ComparisonValue>
-                    {formatCurrency(periodComparison.current.balance)}
-                  </ComparisonValue>
-                  <ComparisonChange
-                    $isPositive={periodComparison.changes.balanceChange >= 0}
-                  >
-                    {formatPercentage(periodComparison.changes.balanceChange)}
-                  </ComparisonChange>
-                </ComparisonCard>
-              </ComparisonCardsGrid>
-            ) : null}
-          </Section>
-
-          {/* 1.2 Orçamento vs Real */}
-          <Section>
-            <SectionTitle>Orçamento vs Real</SectionTitle>
-            <SectionDescription>
-              Orçamento sugerido baseado na média dos últimos 3 meses
-            </SectionDescription>
-            {isLoadingData ? (
-              <Skeleton className="h-64 w-full" />
-            ) : budgetSuggestion ? (
-              <Card>
-                {budgetSuggestion.categories
-                  .filter((cat) => cat.difference > 0)
-                  .slice(0, 5)
-                  .map((category) => (
-                    <InsightCard key={category.category}>
-                      <InsightText>
-                        <strong>Você ultrapassou o orçamento sugerido em {category.category}</strong>
-                        <br />
-                        Orçamento sugerido: {formatCurrency(category.suggestedBudget)} | 
-                        Gasto atual: {formatCurrency(category.currentSpent)} | 
-                        Diferença: +{formatCurrency(category.difference)} ({category.percentage.toFixed(0)}%)
-                      </InsightText>
-                    </InsightCard>
-                  ))}
-                {budgetSuggestion.categories.filter((cat) => cat.difference > 0).length === 0 && (
-                  <InsightText>
-                    Parabéns! Você está dentro do orçamento sugerido em todas as categorias.
-                  </InsightText>
-                )}
-              </Card>
-            ) : null}
-          </Section>
-
-          {/* 1.3 Top 3 Vilões do Mês */}
-          <Section>
-            <SectionTitle>Top 3 Vilões do Mês</SectionTitle>
-            <SectionDescription>
-              Os principais responsáveis pelos seus gastos
-            </SectionDescription>
-            {isLoadingData ? (
-              <Skeleton className="h-64 w-full" />
-            ) : topVillains ? (
-              <Card>
-                <VillainsList>
-                  {topVillains.biggestCategoryIncrease && (
-                    <InsightCard>
-                      <InsightText>
-                        <strong>📈 Categoria que mais cresceu:</strong> {topVillains.biggestCategoryIncrease.category}
-                        <br />
-                        Aumento de {topVillains.biggestCategoryIncrease.increase.toFixed(1)}% 
-                        ({formatCurrency(topVillains.biggestCategoryIncrease.previous)} → {formatCurrency(topVillains.biggestCategoryIncrease.current)})
-                      </InsightText>
-                    </InsightCard>
-                  )}
-                  {topVillains.heaviestRecurringExpense && (
-                    <InsightCard>
-                      <InsightText>
-                        <strong>💳 Gasto recorrente mais pesado:</strong> {topVillains.heaviestRecurringExpense.name}
-                        <br />
-                        Valor: {formatCurrency(topVillains.heaviestRecurringExpense.amount)} | 
-                        Impacto anual: {formatCurrency(topVillains.heaviestRecurringExpense.annualImpact)}
-                      </InsightText>
-                    </InsightCard>
-                  )}
-                  {topVillains.biggestSingleExpense && (
-                    <InsightCard>
-                      <InsightText>
-                        <strong>💸 Maior despesa isolada:</strong> {topVillains.biggestSingleExpense.name || 'Sem nome'} ({topVillains.biggestSingleExpense.category})
-                        <br />
-                        Valor: {formatCurrency(topVillains.biggestSingleExpense.amount)} | 
-                        Data: {formatDate(topVillains.biggestSingleExpense.date)}
-                      </InsightText>
-                    </InsightCard>
-                  )}
-                </VillainsList>
-              </Card>
-            ) : null}
-          </Section>
-
-          {/* 2. Análise de Gastos por Categoria */}
-          <Section>
-            <SectionTitle>Análise de Gastos por Categoria</SectionTitle>
-            <SectionDescription>
-              Evolução e variação dos gastos por categoria
-            </SectionDescription>
-            {isLoadingData ? (
-              <Skeleton className="h-64 w-full" />
-            ) : (
-              <Card>
-                <Table>
-                  <TableHeader>
-                    <tr>
-                      <TableHeaderCell>Categoria</TableHeaderCell>
-                      <TableHeaderCell>Média Mensal</TableHeaderCell>
-                      <TableHeaderCell>Último Mês</TableHeaderCell>
-                      <TableHeaderCell>Variação</TableHeaderCell>
-                      <TableHeaderCell>Mês Mais Caro</TableHeaderCell>
-                    </tr>
-                  </TableHeader>
-                  <tbody>
-                    {categoryAnalysis.map((item) => (
-                      <TableRow key={item.category}>
-                        <TableCell>
-                          <CategoryCellContent>
-                            {item.icon && (
-                              <IconRenderer iconName={item.icon} size={20} />
-                            )}
-                            {item.category}
-                          </CategoryCellContent>
-                        </TableCell>
-                        <TableCell>{formatCurrency(item.averageMonthly)}</TableCell>
-                        <TableCell>{formatCurrency(item.lastMonth)}</TableCell>
-                        <TableCellWithColor
-                          $isPositive={item.variation < 0}
-                          $isNegative={item.variation > 0}
-                        >
-                          {item.variation > 0 ? '+' : ''}
-                          {item.variation.toFixed(1)}%
-                        </TableCellWithColor>
-                        <TableCell>
-                        {formatMonthYear(item.mostExpensiveMonth.month)}{' '}
-                        - {formatCurrency(item.mostExpensiveMonth.value)}
-                        </TableCell>
-                      </TableRow>
-                    ))}
-                  </tbody>
-                </Table>
-              </Card>
-            )}
-          </Section>
-
-          {/* 3. Gastos Recorrentes */}
-          <Section>
-            <SectionTitle>Gastos Recorrentes Detectados</SectionTitle>
-            <SectionDescription>
-              Gastos que se repetem regularmente e seu impacto anual
-            </SectionDescription>
-            {isLoadingData ? (
-              <Skeleton className="h-64 w-full" />
-            ) : (
-              <Card>
-                {recurringExpenses.length === 0 ? (
-                  <p>Nenhum gasto recorrente detectado</p>
+          <StatsGrid role="list">
+            <Card role="listitem">
+              <CardHeader className="pb-1 flex flex-row items-center justify-between">
+                <CardTitle className="text-base">Receitas</CardTitle>
+                {isLoadingStats ? (
+                  <Skeleton className="h-4 w-16" />
                 ) : (
-                  <>
-                    {recurringExpenses.map((expense) => (
-                      <RecurringExpenseItem key={expense.name}>
-                        <RecurringExpenseName>{expense.name}</RecurringExpenseName>
-                        <RecurringExpenseDetails>
-                          <div>
-                            <strong>Valor:</strong> {formatCurrency(expense.amount)}
-                          </div>
-                          <div>
-                            <strong>Frequência:</strong>{' '}
-                            {expense.frequency === 'weekly'
-                              ? 'Semanal'
-                              : expense.frequency === 'biweekly'
-                                ? 'Quinzenal'
-                                : expense.frequency === 'monthly'
-                                  ? 'Mensal'
-                                  : 'Irregular'}
-                          </div>
-                          <div>
-                            <strong>Impacto Anual:</strong>{' '}
-                            {formatCurrency(expense.annualImpact)}
-                          </div>
-                          <div>
-                            <strong>Categoria:</strong> {expense.category}
-                          </div>
-                        </RecurringExpenseDetails>
-                      </RecurringExpenseItem>
-                    ))}
-                    {incomeSources && (
-                      <InsightCardWithMargin>
-                        <InsightText>
-                          Esses gastos representam{' '}
-                          {incomeSources.totalIncome > 0
-                            ? (
-                                (recurringExpenses.reduce(
-                                  (sum, e) => sum + e.annualImpact,
-                                  0,
-                                ) /
-                                  12 /
-                                  (incomeSources.totalIncome /
-                                    Math.max(monthlyEvolution.length, 1))) *
-                                100
-                              ).toFixed(0)
-                            : 0}
-                          % da sua renda mensal
-                        </InsightText>
-                      </InsightCardWithMargin>
+                  <span
+                    className={`text-xs flex items-center gap-0.5 ${
+                      stats.incomeChange >= 0 ? 'text-green-600' : 'text-red-600'
+                    }`}
+                  >
+                    {stats.incomeChange >= 0 ? (
+                      <TrendingUp size={14} aria-hidden />
+                    ) : (
+                      <TrendingDown size={14} aria-hidden />
                     )}
-                  </>
+                    {stats.incomeChange >= 0 ? '+' : ''}
+                    {stats.incomeChange.toFixed(1)}%
+                  </span>
                 )}
-              </Card>
-            )}
-          </Section>
+              </CardHeader>
+              <CardContent className="pt-0">
+                {isLoadingStats ? (
+                  <Skeleton className="h-8 w-24" />
+                ) : (
+                  <span className="text-xl font-semibold text-green-600">
+                    {currencyFormatter.format(stats.income)}
+                  </span>
+                )}
+              </CardContent>
+            </Card>
+            <Card role="listitem">
+              <CardHeader className="pb-1 flex flex-row items-center justify-between">
+                <CardTitle className="text-base">Gastos</CardTitle>
+                {isLoadingStats ? (
+                  <Skeleton className="h-4 w-16" />
+                ) : (
+                  <span
+                    className={`text-xs flex items-center gap-0.5 ${
+                      stats.expenseChange <= 0 ? 'text-green-600' : 'text-red-600'
+                    }`}
+                  >
+                    {stats.expenseChange <= 0 ? (
+                      <TrendingUp size={14} aria-hidden />
+                    ) : (
+                      <TrendingDown size={14} aria-hidden />
+                    )}
+                    {stats.expenseChange >= 0 ? '+' : ''}
+                    {stats.expenseChange.toFixed(1)}%
+                  </span>
+                )}
+              </CardHeader>
+              <CardContent className="pt-0">
+                {isLoadingStats ? (
+                  <Skeleton className="h-8 w-24" />
+                ) : (
+                  <span className="text-xl font-semibold text-red-600">
+                    {currencyFormatter.format(stats.expense)}
+                  </span>
+                )}
+              </CardContent>
+            </Card>
+            <Card role="listitem">
+              <CardHeader className="pb-1 flex flex-row items-center justify-between">
+                <CardTitle className="text-base">Saldo</CardTitle>
+                {isLoadingStats ? (
+                  <Skeleton className="h-4 w-16" />
+                ) : (
+                  <span
+                    className={`text-xs flex items-center gap-0.5 ${
+                      stats.balanceChange >= 0 ? 'text-green-600' : 'text-red-600'
+                    }`}
+                  >
+                    {stats.balanceChange >= 0 ? (
+                      <TrendingUp size={14} aria-hidden />
+                    ) : (
+                      <TrendingDown size={14} aria-hidden />
+                    )}
+                    {stats.balanceChange >= 0 ? '+' : ''}
+                    {stats.balanceChange.toFixed(1)}%
+                  </span>
+                )}
+              </CardHeader>
+              <CardContent className="pt-0">
+                {isLoadingStats ? (
+                  <Skeleton className="h-8 w-24" />
+                ) : (
+                  <span
+                    className={`text-xl font-semibold ${
+                      stats.balance >= 0 ? 'text-green-600' : 'text-red-600'
+                    }`}
+                  >
+                    {currencyFormatter.format(stats.balance)}
+                  </span>
+                )}
+              </CardContent>
+            </Card>
+            <Card role="listitem">
+              <CardHeader className="pb-1 flex flex-row items-center justify-between">
+                <CardTitle className="text-base">Investimentos</CardTitle>
+                {isLoadingInvestments ? (
+                  <Skeleton className="h-4 w-16" />
+                ) : (
+                  <span></span>
+                )}
+              </CardHeader>
+              <CardContent className="pt-0">
+                {isLoadingInvestments ? (
+                  <Skeleton className="h-8 w-24" />
+                ) : investmentData ? (
+                  <span className="text-xl font-semibold">
+                    {currencyFormatter.format(investmentData.totalValue)}
+                  </span>
+                ) : (
+                  <span className="text-sm text-muted-foreground">
+                    Sem dados
+                  </span>
+                )}
+              </CardContent>
+            </Card>
+          </StatsGrid>
 
-          {/* 4. Análise de Fontes de Receita */}
-          <Section>
-            <SectionTitle>Análise de Fontes de Receita</SectionTitle>
-            <SectionDescription>
-              Distribuição e dependência das suas fontes de receita
-            </SectionDescription>
-            {isLoadingData ? (
-              <Skeleton className="h-64 w-full" />
-            ) : incomeSources ? (
-              <Card>
+          <ChartSection aria-labelledby="chart-expenses-title">
+            <SectionTitle id="chart-expenses-title">
+              Gastos por categoria
+            </SectionTitle>
+            <ChartsGrid>
+              <ChartCard>
+                {isLoadingCategories ? (
+                  <Skeleton className="h-72 w-full" />
+                ) : pieData.length === 0 ? (
+                  <p className="text-sm text-muted-foreground">
+                    Nenhum dado no período.
+                  </p>
+                ) : (
+                  <ChartContainer>
+                    <ResponsiveContainer width="100%" height="100%">
+                      <PieChart>
+                        <Pie
+                          data={pieData}
+                          dataKey="value"
+                          nameKey="name"
+                          cx="50%"
+                          cy="50%"
+                          outerRadius="80%"
+                          label={({ name, percent }) =>
+                            `${name} ${((percent ?? 0) * 100).toFixed(0)}%`
+                          }
+                        >
+                          {categories.map((entry) => (
+                            <Cell key={entry.name} fill={entry.color} />
+                          ))}
+                        </Pie>
+                        <Tooltip content={<CustomPieTooltip theme={theme} />} />
+                      </PieChart>
+                    </ResponsiveContainer>
+                  </ChartContainer>
+                )}
+              </ChartCard>
+              <ChartCard>
+                {isLoadingCategories ? (
+                  <Skeleton className="h-72 w-full" />
+                ) : expensesCategories.length === 0 ? (
+                  <p className="text-sm text-muted-foreground">
+                    Nenhum dado no período.
+                  </p>
+                ) : (
+                  <ChartContainer>
+                    <ResponsiveContainer width="100%" height="100%">
+                      <BarChart
+                        data={expensesCategories.slice(0, 8)}
+                        layout="vertical"
+                        margin={{ left: 80 }}
+                      >
+                        <XAxis
+                          type="number"
+                          tickFormatter={(v) =>
+                            v >= 1000 ? `R$ ${v / 1000}k` : `R$ ${v}`
+                          }
+                        />
+                        <YAxis
+                          type="category"
+                          dataKey="name"
+                          width={75}
+                          tick={{ fontSize: 12 }}
+                        />
+                        <Tooltip
+                          cursor={false}
+                          contentStyle={{
+                            backgroundColor: theme === 'dark' ? '#1e1e1e' : '#ffffff',
+                            border: `1px solid ${theme === 'dark' ? '#2a2a2a' : '#e5e5e5'}`,
+                            borderRadius: '0.5rem',
+                            color: theme === 'dark' ? '#ffffff' : '#111827',
+                            padding: '0.75rem',
+                          }}
+                          formatter={(value: number | undefined) =>
+                            value != null
+                              ? currencyFormatter.format(value)
+                              : ''
+                          }
+                        />
+                        <Bar dataKey="value" fill="#8b5cf6" radius={[0, 4, 4, 0]} />
+                      </BarChart>
+                    </ResponsiveContainer>
+                  </ChartContainer>
+                )}
+              </ChartCard>
+            </ChartsGrid>
+          </ChartSection>
+
+          <ChartSection aria-labelledby="chart-evolution-title">
+            <SectionTitle id="chart-evolution-title">
+              Evolução no período
+            </SectionTitle>
+            <ChartCardFull>
+              {isLoadingTimeSeries ? (
+                <Skeleton className="h-72 w-full" />
+              ) : timeSeriesData.length === 0 ? (
+                <p className="text-sm text-muted-foreground">
+                  Nenhum dado no período.
+                </p>
+              ) : (
                 <ChartContainer>
-                  <ResponsiveContainer width="100%" height={300}>
-                    <BarChart data={incomeSources.sources.slice(0, 10)}>
-                      <CartesianGrid strokeDasharray="3 3" />
-                      <XAxis dataKey="sourceLabel" angle={-45} textAnchor="end" height={100} />
-                      <YAxis />
-                      <Tooltip
-                        formatter={(value: number | undefined) =>
-                          value !== undefined ? formatCurrency(value) : ''
+                  <ResponsiveContainer width="100%" height="100%">
+                    <BarChart
+                      data={timeSeriesData}
+                      margin={{ top: 8, right: 8, left: 8, bottom: 8 }}
+                    >
+                      <XAxis dataKey="label" />
+                      <YAxis
+                        tickFormatter={(v) =>
+                          v >= 1000 ? `R$ ${v / 1000}k` : `R$ ${v}`
                         }
                       />
+                      <Tooltip
+                        cursor={false}
+                        contentStyle={{
+                          backgroundColor: theme === 'dark' ? '#1e1e1e' : '#ffffff',
+                          border: `1px solid ${theme === 'dark' ? '#2a2a2a' : '#e5e5e5'}`,
+                          borderRadius: '0.5rem',
+                          color: theme === 'dark' ? '#ffffff' : '#111827',
+                          padding: '0.75rem',
+                        }}
+                        formatter={(value: number | undefined) =>
+                          value != null
+                            ? currencyFormatter.format(value)
+                            : ''
+                        }
+                        labelFormatter={(label) => label}
+                      />
                       <Legend />
-                      <Bar dataKey="total" fill="#4ade80" name="Total (R$)" />
+                      <Bar dataKey="incomes" name="Receitas" fill="#22c55e" radius={[4, 4, 0, 0]} />
+                      <Bar dataKey="expenses" name="Gastos" fill="#ef4444" radius={[4, 4, 0, 0]} />
                     </BarChart>
                   </ResponsiveContainer>
                 </ChartContainer>
-                <InsightCard>
-                  <InsightText>
-                    {incomeSources.sourceCount} fonte(s) de receita detectada(s)
-                  </InsightText>
-                  <InsightText>
-                    {incomeSources.mainSourcePercentage.toFixed(1)}% da sua renda
-                    vem de uma única fonte
-                    {incomeSources.mainSourcePercentage > 80 && (
-                      <WarningText>
-                        {' '}
-                        (alta dependência)
-                      </WarningText>
-                    )}
-                  </InsightText>
-                </InsightCard>
-              </Card>
-            ) : null}
-          </Section>
+              )}
+            </ChartCardFull>
+          </ChartSection>
 
-          {/* 5. Padrão de Consumo */}
-          <Section>
-            <SectionTitle>Padrão de Consumo no Tempo</SectionTitle>
-            <SectionDescription>
-              Quando você mais gasta durante a semana e o mês
-            </SectionDescription>
-            {isLoadingData ? (
-              <Skeleton className="h-64 w-full" />
-            ) : consumptionPattern ? (
-              <Card>
-                <HeatmapSection>
-                  <HeatmapSectionTitle>Por Dia da Semana</HeatmapSectionTitle>
-                  <HeatmapContainer>
-                    {consumptionPattern.byDayOfWeek.map((day) => {
-                      const maxTotal = Math.max(
-                        ...consumptionPattern.byDayOfWeek.map((d) => d.total),
-                      );
-                      const intensity = maxTotal > 0 ? day.total / maxTotal : 0;
-                      return (
-                        <HeatmapDayContainer key={day.day}>
-                          <HeatmapLabel>{day.day}</HeatmapLabel>
-                          <HeatmapDay $intensity={intensity}>
-                            {formatCurrency(day.total)}
-                          </HeatmapDay>
-                        </HeatmapDayContainer>
-                      );
-                    })}
-                  </HeatmapContainer>
-                </HeatmapSection>
-              </Card>
-            ) : null}
-          </Section>
-
-          {/* 6. Saúde Financeira */}
-          <Section>
-            <SectionTitle>Saúde Financeira</SectionTitle>
-            <SectionDescription>
-              Score e análise da sua situação financeira
-            </SectionDescription>
-            {isLoadingData ? (
-              <Skeleton className="h-64 w-full" />
-            ) : financialHealth ? (
-              <Card>
-                <HealthScoreCard>
-                  <ScoreValue $color={getScoreColor(financialHealth.score)}>
-                    {financialHealth.score}
-                  </ScoreValue>
-                  <ScoreLabel>{getScoreLabel(financialHealth.score)}</ScoreLabel>
-                  <ScoreDetails>
-                    <ScoreDetailItem>
-                      <strong>Gastos sobre receita:</strong>{' '}
-                      {financialHealth.details.expenseRatio.toFixed(1)}%
-                    </ScoreDetailItem>
-                    <ScoreDetailItem>
-                      <strong>Meses positivos:</strong>{' '}
-                      {financialHealth.details.positiveMonths} (
-                      {financialHealth.details.positiveMonthsPercentage.toFixed(0)}%)
-                    </ScoreDetailItem>
-                    <ScoreDetailItem>
-                      <strong>Gastos recorrentes sobre renda:</strong>{' '}
-                      {financialHealth.details.recurringExpenseRatio.toFixed(1)}%
-                    </ScoreDetailItem>
-                  </ScoreDetails>
-                  <InsightsList>
-                    {financialHealth.insights.map((insight, index) => (
-                      <InsightItem key={index}>{insight}</InsightItem>
-                    ))}
-                  </InsightsList>
-                </HealthScoreCard>
-              </Card>
-            ) : null}
-          </Section>
-
-          {/* 7. Insights Automáticos */}
-          {!isLoadingData && (
-            <Section>
-              <SectionTitle>Insights Automáticos</SectionTitle>
-              <SectionDescription>
-                Análises inteligentes sobre seus hábitos financeiros
-              </SectionDescription>
-              <Card>
-                <InsightsList>
-                  {monthlyEvolution.length > 0 && (
-                    <>
-                      {(() => {
-                        const avgExpense =
-                          monthlyEvolution.reduce(
-                            (sum, m) => sum + m.expense,
-                            0,
-                          ) / monthlyEvolution.length;
-                        const lastMonthExpense = monthlyEvolution[
-                          monthlyEvolution.length - 1
-                        ]?.expense || 0;
-                        if (lastMonthExpense > avgExpense * 1.1) {
-                          return (
-                            <InsightItem key="expense-increase">
-                              Você gastou mais este mês do que sua média
-                              histórica (+
-                              {(
-                                ((lastMonthExpense - avgExpense) / avgExpense) *
-                                100
-                              ).toFixed(0)}
-                              %)
-                            </InsightItem>
-                          );
+          <ChartSection aria-labelledby="chart-monthly-title">
+            <SectionTitle id="chart-monthly-title">
+              Comparação mês a mês (últimos 6 meses)
+            </SectionTitle>
+            <ChartCardFull>
+              {isLoadingMonthly ? (
+                <Skeleton className="h-72 w-full" />
+              ) : monthlyComparison.length === 0 ? (
+                <p className="text-sm text-muted-foreground">
+                  Nenhum dado disponível.
+                </p>
+              ) : (
+                <ChartContainer>
+                  <ResponsiveContainer width="100%" height="100%">
+                    <BarChart
+                      data={monthlyComparison}
+                      margin={{ top: 8, right: 8, left: 8, bottom: 8 }}
+                    >
+                      <XAxis dataKey="label" />
+                      <YAxis
+                        tickFormatter={(v) =>
+                          v >= 1000 ? `R$ ${v / 1000}k` : `R$ ${v}`
                         }
-                        return null;
-                      })()}
-                      {categoryAnalysis.length > 0 && (
-                        <>
-                          {(() => {
-                            const maxIncrease = categoryAnalysis.reduce(
-                              (max, cat) =>
-                                cat.variation > max.variation ? cat : max,
-                              categoryAnalysis[0],
-                            );
-                            if (maxIncrease.variation > 10) {
-                              return (
-                                <InsightItem key="category-increase">
-                                  Seu maior aumento foi em {maxIncrease.category}{' '}
-                                  (+{maxIncrease.variation.toFixed(0)}%)
-                                </InsightItem>
-                              );
+                      />
+                      <Tooltip
+                        cursor={false}
+                        contentStyle={{
+                          backgroundColor: theme === 'dark' ? '#1e1e1e' : '#ffffff',
+                          border: `1px solid ${theme === 'dark' ? '#2a2a2a' : '#e5e5e5'}`,
+                          borderRadius: '0.5rem',
+                          color: theme === 'dark' ? '#ffffff' : '#111827',
+                          padding: '0.75rem',
+                        }}
+                        formatter={(value: number | undefined) =>
+                          value != null
+                            ? currencyFormatter.format(value)
+                            : ''
+                        }
+                      />
+                      <Legend />
+                      <Bar dataKey="incomes" name="Receitas" fill="#22c55e" radius={[4, 4, 0, 0]} />
+                      <Bar dataKey="expenses" name="Gastos" fill="#ef4444" radius={[4, 4, 0, 0]} />
+                    </BarChart>
+                  </ResponsiveContainer>
+                </ChartContainer>
+              )}
+            </ChartCardFull>
+          </ChartSection>
+
+          <ChartSection aria-labelledby="chart-investments-title">
+            <SectionTitle id="chart-investments-title">
+              Investimentos
+            </SectionTitle>
+            <ChartsGrid>
+              {isLoadingInvestments ? (
+                <>
+                  <Skeleton className="h-72 w-full" />
+                  <Skeleton className="h-72 w-full" />
+                </>
+              ) : investmentData ? (
+                <>
+                  <ChartCard>
+                    <ChartContainer>
+                      <ResponsiveContainer width="100%" height="100%">
+                        <BarChart
+                          data={investmentData.evolution}
+                          margin={{ top: 8, right: 8, left: 8, bottom: 8 }}
+                        >
+                          <XAxis dataKey="month" />
+                          <YAxis
+                            tickFormatter={(v) =>
+                              v >= 1000 ? `R$ ${v / 1000}k` : `R$ ${v}`
                             }
-                            return null;
-                          })()}
-                        </>
-                      )}
-                      {monthlyEvolution.length > 1 && (
-                        <>
-                          {(() => {
-                            const incomeGrowth =
-                              ((monthlyEvolution[monthlyEvolution.length - 1]
-                                ?.income || 0) -
-                                (monthlyEvolution[monthlyEvolution.length - 2]
-                                  ?.income || 0)) /
-                              (monthlyEvolution[monthlyEvolution.length - 2]
-                                ?.income || 1);
-                            const expenseGrowth =
-                              ((monthlyEvolution[monthlyEvolution.length - 1]
-                                ?.expense || 0) -
-                                (monthlyEvolution[monthlyEvolution.length - 2]
-                                  ?.expense || 0)) /
-                              (monthlyEvolution[monthlyEvolution.length - 2]
-                                ?.expense || 1);
-                            if (expenseGrowth > incomeGrowth && incomeGrowth > 0) {
-                              return (
-                                <InsightItem key="growth-comparison">
-                                  Seus gastos cresceram mais rápido que sua
-                                  renda
-                                </InsightItem>
-                              );
+                          />
+                          <Tooltip
+                            cursor={false}
+                            contentStyle={{
+                              backgroundColor: theme === 'dark' ? '#1e1e1e' : '#ffffff',
+                              border: `1px solid ${theme === 'dark' ? '#2a2a2a' : '#e5e5e5'}`,
+                              borderRadius: '0.5rem',
+                              color: theme === 'dark' ? '#ffffff' : '#111827',
+                              padding: '0.75rem',
+                            }}
+                            formatter={(value: number | undefined) =>
+                              value != null
+                                ? currencyFormatter.format(value)
+                                : ''
                             }
-                            return null;
-                          })()}
-                        </>
-                      )}
-                    </>
-                  )}
-                </InsightsList>
-              </Card>
-            </Section>
-          )}
+                          />
+                          <Bar
+                            dataKey="portfolioValue"
+                            name="Valor do portfólio"
+                            fill="#3b82f6"
+                            radius={[4, 4, 0, 0]}
+                          />
+                        </BarChart>
+                      </ResponsiveContainer>
+                    </ChartContainer>
+                  </ChartCard>
+                </>
+              ) : (
+                <ChartCard>
+                  <p className="text-sm text-muted-foreground">
+                    Sem dados de investimentos.
+                  </p>
+                </ChartCard>
+              )}
+            </ChartsGrid>
+          </ChartSection>
+
+          <InsightsSection aria-labelledby="insights-title">
+            <SectionTitle id="insights-title">Sugestões e insights</SectionTitle>
+            {isLoadingInsights ? (
+              <div className="space-y-2">
+                <Skeleton className="h-16 w-full" />
+                <Skeleton className="h-16 w-full" />
+                <Skeleton className="h-16 w-full" />
+              </div>
+            ) : insights.length === 0 ? (
+              <p className="text-sm text-muted-foreground">
+                Nenhum insight no momento. Continue registrando gastos e
+                receitas para receber sugestões.
+              </p>
+            ) : (
+              <InsightsList role="list">
+                {insights.map((insight, index) => (
+                  <InsightCard
+                    key={index}
+                    $severity={insight.severity}
+                    role="listitem"
+                  >
+                    <div className="flex gap-2">
+                      <span className="shrink-0 mt-0.5" aria-hidden>
+                        {insight.severity === 'error' && (
+                          <AlertCircle className="h-5 w-5 text-red-500" />
+                        )}
+                        {insight.severity === 'warning' && (
+                          <AlertTriangle className="h-5 w-5 text-amber-500" />
+                        )}
+                        {insight.severity === 'success' && (
+                          <CheckCircle className="h-5 w-5 text-green-500" />
+                        )}
+                        {(insight.severity === 'info' || !insight.severity) && (
+                          <Info className="h-5 w-5 text-blue-500" />
+                        )}
+                      </span>
+                      <div>
+                        <p className="text-sm font-medium">{insight.message}</p>
+                        {insight.suggestion && (
+                          <p className="text-xs text-muted-foreground mt-1">
+                            {insight.suggestion}
+                          </p>
+                        )}
+                      </div>
+                    </div>
+                  </InsightCard>
+                ))}
+              </InsightsList>
+            )}
+          </InsightsSection>
         </AnalyticsContent>
       </AnalyticsMain>
     </AnalyticsWrapper>

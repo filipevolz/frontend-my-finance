@@ -96,18 +96,13 @@ const expenseSchema = z.object({
     message: 'Selecione um cartão quando pagar com cartão',
     path: ['cardId'],
   },
-).refine(
-  (data) => {
-    if (data.cardId && (!data.installments || data.installments < 1)) {
-      return false;
-    }
-    return true;
-  },
-  {
-    message: 'Informe o número de parcelas',
-    path: ['installments'],
-  },
-);
+).transform((data) => {
+  // Se pagar com cartão e não informar parcelas, assume 1 (à vista)
+  if (data.paidWithCard && data.cardId && !data.installments) {
+    return { ...data, installments: 1 };
+  }
+  return data;
+});
 
 type ExpenseFormData = z.infer<typeof expenseSchema>;
 
@@ -191,11 +186,12 @@ export function AddExpenseModal({
         .findOne(expenseId)
         .then((response) => {
           const expense = response.data;
-  
-          const dateStr = expense.date.split('T')[0];
+          // Data * no modal = data de compra (purchaseDate); fallback para date se não houver purchaseDate
+          const dateSource = expense.purchaseDate ?? expense.date;
+          const dateStr = dateSource.split('T')[0];
           const [year, month, day] = dateStr.split('-').map(Number);
           const expenseDate = new Date(year, month - 1, day);
-  
+
           setExpenseGroupId(expense.groupId || null);
           reset({
             name: expense.name || '',
@@ -252,7 +248,7 @@ export function AddExpenseModal({
           // Sempre enviar cardId explicitamente (null se não tiver, string se tiver)
           // Isso permite ao backend detectar quando o cartão foi adicionado ou removido
           cardId: data.paidWithCard && data.cardId ? data.cardId : null,
-          installments: data.paidWithCard && data.cardId && data.installments ? data.installments : null,
+          installments: data.paidWithCard && data.cardId ? (data.installments || 1) : null,
         };
         await expensesService.update(expenseId, requestData, updateGroup);
       } else {
@@ -263,7 +259,7 @@ export function AddExpenseModal({
           date: `${data.date.getFullYear()}-${String(data.date.getMonth() + 1).padStart(2, '0')}-${String(data.date.getDate()).padStart(2, '0')}`,
           is_paid: data.is_paid ?? false,
           cardId: data.cardId || null,
-          installments: data.paidWithCard && data.cardId && data.installments ? data.installments : null,
+          installments: data.paidWithCard && data.cardId ? (data.installments || 1) : null,
         };
         await expensesService.create(requestData);
       }
@@ -536,6 +532,11 @@ export function AddExpenseModal({
                                 setValue('cardId', defaultCard.id);
                               }
                             }
+                            // Se não tiver parcelas definidas, assume 1 (à vista)
+                            const currentInstallments = watch('installments');
+                            if (!currentInstallments) {
+                              setValue('installments', 1);
+                            }
                           } else {
                             // Se desmarcou, limpar cartão e parcelas
                             setValue('cardId', undefined);
@@ -565,7 +566,14 @@ export function AddExpenseModal({
                     render={({ field }) => (
                       <Select
                         value={field.value || 'none'}
-                        onValueChange={(value) => field.onChange(value === 'none' ? undefined : value)}
+                        onValueChange={(value) => {
+                          const cardId = value === 'none' ? undefined : value;
+                          field.onChange(cardId);
+                          // Se selecionou um cartão e não tem parcelas definidas, assume 1 (à vista)
+                          if (cardId && !watch('installments')) {
+                            setValue('installments', 1);
+                          }
+                        }}
                         disabled={isLoading}
                       >
                         <SelectTrigger
@@ -597,13 +605,14 @@ export function AddExpenseModal({
 
                 <FormGroup>
                   <StyledLabel htmlFor="installments">
-                    Parcelas <span aria-label="obrigatório">*</span>
+                    Parcelas
                   </StyledLabel>
                   <Controller
                     name="installments"
                     control={control}
                     render={({ field }) => {
-                      const installments = field.value;
+                      // Se não tiver valor definido, assume 1 (à vista)
+                      const installments = field.value || 1;
                       const amountValue = watch('amount');
                       let installmentValue = '';
                       
@@ -644,6 +653,7 @@ export function AddExpenseModal({
                                   field.onChange(24);
                                 }
                               } else {
+                                // Quando limpar o campo, mantém undefined (será tratado como 1 no submit)
                                 field.onChange(undefined);
                               }
                             }}

@@ -11,7 +11,7 @@ export const AnalyticsWrapper = styled.div<{ $theme: 'light' | 'dark' }>`
 export const AnalyticsMain = styled.main`
   flex: 1;
   padding: 2rem;
-  max-width: 1400px;
+  max-width: 90rem;
   width: 100%;
   margin: 0 auto;
 `;
@@ -29,52 +29,48 @@ export const PageTitle = styled.h1`
   margin: 0;
 `;
 
-export const Section = styled.section`
+export const FilterSection = styled.section`
   display: flex;
-  flex-direction: column;
+  justify-content: space-between;
+  align-items: center;
+  flex-wrap: wrap;
   gap: 1rem;
-`;
 
-export const SectionTitle = styled.h2`
-  font-size: 1.5rem;
-  font-weight: 600;
-  color: ${(props) => props.theme.text};
-  margin: 0;
-`;
-
-export const SectionDescription = styled.p`
-  font-size: 0.875rem;
-  color: ${(props) => props.theme.textSecondary};
-  margin: 0;
+  @media (max-width: 768px) {
+    flex-direction: column;
+    align-items: flex-start;
+  }
 `;
 
 export const PeriodSelector = styled.div`
   display: flex;
-  gap: 0.5rem;
+  gap: 0.75rem;
+  align-items: center;
   flex-wrap: wrap;
 `;
 
 export const PeriodButton = styled.button<{ $active?: boolean }>`
-  padding: 0.5rem 1rem;
-  border-radius: 0.5rem;
-  border: 0.0625rem solid
-    ${(props) => (props.$active ? props.theme.primary : props.theme.border)};
   background-color: ${(props) =>
     props.$active ? props.theme.primary : props.theme.surface};
   color: ${(props) => (props.$active ? '#fff' : props.theme.textSecondary)};
+  border: 0.0625rem solid
+    ${(props) => (props.$active ? props.theme.primary : props.theme.border)};
+  border-radius: 0.5rem;
+  padding: 0.5rem 1rem;
   font-size: 0.875rem;
-  font-weight: ${(props) => (props.$active ? 600 : 400)};
+  font-weight: 500;
   cursor: pointer;
-  transition:
-    background-color 0.2s,
-    border-color 0.2s,
-    color 0.2s;
+  transition: all 0.2s;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 0.5rem;
 
   &:hover {
     background-color: ${(props) =>
       props.$active ? props.theme.primaryHover : props.theme.surfaceSecondary};
     border-color: ${(props) =>
-      props.$active ? props.theme.primaryHover : props.theme.border};
+      props.$active ? props.theme.primaryHover : props.theme.borderHover};
   }
 
   &:focus-visible {
@@ -83,278 +79,221 @@ export const PeriodButton = styled.button<{ $active?: boolean }>`
   }
 `;
 
-export const Card = styled.div`
-  background-color: ${(props) => props.theme.surface};
-  border: 0.0625rem solid ${(props) => props.theme.border};
-  border-radius: 0.75rem;
-  padding: 1.5rem;
-  box-shadow: 0 0.0625rem 0.1875rem ${(props) => props.theme.shadow};
+export const PeriodSelectWrapper = styled.div`
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
 `;
 
-export const ChartContainer = styled.div`
-  width: 100%;
-  margin-bottom: 1rem;
+export const DatePickerTriggerButton = styled.button`
+  background: none;
+  border: none;
+  padding: 0;
+  cursor: pointer;
 `;
 
-export const InsightCard = styled.article`
-  background-color: ${(props) => props.theme.surfaceSecondary};
+export const ClearDateRangeButton = styled.button`
+  background: none;
+  border: none;
+  color: ${(props) => props.theme.textSecondary};
+  cursor: pointer;
+  padding: 0.5rem;
   border-radius: 0.5rem;
-  padding: 1rem;
-  margin-top: 1rem;
-`;
-
-export const InsightText = styled.p`
-  font-size: 0.875rem;
-  color: ${(props) => props.theme.text};
-  margin: 0;
-  line-height: 1.5;
-`;
-
-export const Table = styled.table`
-  width: 100%;
-  border-collapse: collapse;
-`;
-
-export const TableHeader = styled.thead`
-  background-color: ${(props) => props.theme.surfaceSecondary};
-`;
-
-export const TableHeaderCell = styled.th`
-  padding: 0.75rem;
-  text-align: left;
-  font-size: 0.875rem;
-  font-weight: 600;
-  color: ${(props) => props.theme.text};
-  border-bottom: 0.0625rem solid ${(props) => props.theme.border};
-`;
-
-export const TableRow = styled.tr`
-  border-bottom: 0.0625rem solid ${(props) => props.theme.border};
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  transition: background-color 0.2s, color 0.2s;
 
   &:hover {
     background-color: ${(props) => props.theme.surfaceSecondary};
+    color: ${(props) => props.theme.text};
+  }
+
+  &:focus-visible {
+    outline: 0.125rem solid ${(props) => props.theme.primary};
+    outline-offset: 0.125rem;
   }
 `;
 
-export const TableCell = styled.td`
-  padding: 0.75rem;
-  font-size: 0.875rem;
-  color: ${(props) => props.theme.text};
+export const StatsGrid = styled.div`
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(12rem, 1fr));
+  gap: 1rem;
+  align-items: stretch;
+
+  @media (max-width: 640px) {
+    grid-template-columns: 1fr 1fr;
+  }
+
+  /* Garantir que todos os cards tenham a mesma altura */
+  [data-slot='card'] {
+    display: flex;
+    flex-direction: column;
+    height: 100%;
+  }
+
+  /* Garantir altura consistente do header */
+  [data-slot='card-header'] {
+    min-height: 2rem;
+    display: flex;
+    flex-direction: row;
+    align-items: center;
+    justify-content: space-between;
+  }
+
+  /* Alinhar valores na mesma linha */
+  [data-slot='card-content'] {
+    display: flex;
+    align-items: flex-end;
+    min-height: 2.5rem;
+    margin-top: auto;
+  }
 `;
 
-export const HealthScoreCard = styled.div`
+export const ChartSection = styled.section`
   display: flex;
   flex-direction: column;
-  align-items: center;
   gap: 1rem;
 `;
 
-export const ScoreValue = styled.strong<{ $color: string }>`
-  font-size: 4rem;
-  font-weight: 700;
-  color: ${(props) => props.$color};
-  line-height: 1;
-  display: block;
-`;
-
-export const ScoreLabel = styled.p`
+export const SectionTitle = styled.h2`
   font-size: 1.25rem;
   font-weight: 600;
   color: ${(props) => props.theme.text};
   margin: 0;
 `;
 
-export const ScoreDetails = styled.div`
-  display: flex;
-  flex-direction: column;
-  gap: 0.5rem;
-  width: 100%;
-  margin-top: 1rem;
+export const ChartsGrid = styled.div`
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(20rem, 1fr));
+  gap: 1.5rem;
+
+  @media (max-width: 768px) {
+    grid-template-columns: 1fr;
+  }
 `;
 
-export const ScoreDetailItem = styled.p`
-  font-size: 0.875rem;
-  color: ${(props) => props.theme.textSecondary};
-  padding: 0.5rem;
-  background-color: ${(props) => props.theme.surfaceSecondary};
-  border-radius: 0.5rem;
-  margin: 0;
-`;
-
-export const InsightsList = styled.ul`
-  list-style: none;
-  padding: 0;
-  margin: 0;
-  display: flex;
-  flex-direction: column;
-  gap: 0.5rem;
-  width: 100%;
-`;
-
-export const InsightItem = styled.li`
-  font-size: 0.875rem;
-  color: ${(props) => props.theme.text};
-  padding: 0.75rem;
-  background-color: ${(props) => props.theme.surfaceSecondary};
-  border-radius: 0.5rem;
-  border-left: 0.25rem solid ${(props) => props.theme.primary};
-`;
-
-export const HeatmapContainer = styled.div`
-  display: flex;
-  gap: 0.5rem;
-  justify-content: space-around;
-  flex-wrap: wrap;
-`;
-
-export const HeatmapLabel = styled.span`
-  font-size: 0.75rem;
-  color: ${(props) => props.theme.textSecondary};
-  margin-bottom: 0.5rem;
-  font-weight: 600;
-  display: block;
-`;
-
-export const HeatmapDay = styled.span<{ $intensity: number }>`
-  padding: 0.75rem;
-  border-radius: 0.5rem;
-  background-color: ${(props) => {
-    const opacity = Math.max(0.2, props.$intensity);
-    return `rgba(59, 130, 246, ${opacity})`;
-  }};
-  color: ${(props) => props.theme.text};
-  font-size: 0.75rem;
-  font-weight: 600;
-  min-width: 4rem;
-  text-align: center;
+export const ChartCard = styled.div`
+  background-color: ${(props) => props.theme.surface};
+  border-radius: 0.75rem;
+  padding: 1.5rem;
   border: 0.0625rem solid ${(props) => props.theme.border};
-  display: block;
+  min-height: 18rem;
 `;
 
-export const RecurringExpenseItem = styled.div`
-  padding: 1rem;
-  border-bottom: 0.0625rem solid ${(props) => props.theme.border};
-
-  &:last-child {
-    border-bottom: none;
-  }
+export const ChartCardFull = styled(ChartCard)`
+  grid-column: 1 / -1;
 `;
 
-export const RecurringExpenseName = styled.strong`
-  font-size: 1rem;
-  font-weight: 600;
-  color: ${(props) => props.theme.text};
-  margin-bottom: 0.5rem;
-  display: block;
-`;
-
-export const RecurringExpenseDetails = styled.div`
-  display: grid;
-  grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
-  gap: 0.5rem;
-  font-size: 0.875rem;
-  color: ${(props) => props.theme.textSecondary};
-
-  strong {
-    color: ${(props) => props.theme.text};
-  }
-`;
-
-export const SourceItem = styled.div`
-  display: flex;
-  align-items: center;
-  gap: 1rem;
-  padding: 0.75rem;
-  border-bottom: 0.0625rem solid ${(props) => props.theme.border};
-`;
-
-export const SourceBar = styled.div<{ $width: number }>`
-  height: 1.5rem;
-  background-color: ${(props) => props.theme.primary};
-  border-radius: 0.25rem;
-  width: ${(props) => props.$width}%;
-  min-width: 2rem;
-`;
-
-export const SourceInfo = styled.div`
-  display: flex;
-  flex-direction: column;
-  gap: 0.25rem;
-  flex: 1;
-`;
-
-export const ComparisonCardsGrid = styled.div`
-  display: grid;
-  grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
-  gap: 1rem;
-`;
-
-export const ComparisonCard = styled(Card)`
-  display: flex;
-  flex-direction: column;
-`;
-
-export const ComparisonLabel = styled.p`
-  margin-bottom: 0.5rem;
-  font-size: 0.875rem;
-  color: ${(props) => props.theme.textSecondary};
-  margin: 0 0 0.5rem 0;
-`;
-
-export const ComparisonValue = styled.strong`
-  font-size: 1.5rem;
-  font-weight: 600;
-  color: ${(props) => props.theme.text};
-  margin-bottom: 0.25rem;
-  display: block;
-`;
-
-export const ComparisonChange = styled.span<{ $isPositive?: boolean }>`
-  font-size: 0.875rem;
-  color: ${(props) => (props.$isPositive ? '#4ade80' : '#ef4444')};
-  font-weight: 500;
-  display: block;
-`;
-
-export const VillainsList = styled.div`
+export const InsightsSection = styled.section`
   display: flex;
   flex-direction: column;
   gap: 1rem;
 `;
 
-export const CategoryCellContent = styled.div`
+export const InsightsList = styled.div`
   display: flex;
-  align-items: center;
-  gap: 0.5rem;
+  flex-direction: column;
+  gap: 0.75rem;
 `;
 
-export const TableCellWithColor = styled(TableCell)<{ $isPositive?: boolean; $isNegative?: boolean }>`
-  color: ${(props) => {
-    if (props.$isPositive) return '#4ade80';
-    if (props.$isNegative) return '#ef4444';
-    return 'inherit';
+export const InsightCard = styled.div<{ $severity: 'info' | 'warning' | 'success' | 'error' }>`
+  background-color: ${(props) => props.theme.surface};
+  border-radius: 0.5rem;
+  padding: 1rem 1.25rem;
+  border-left: 0.25rem solid
+    ${(props) => {
+      switch (props.$severity) {
+        case 'error':
+          return '#ef4444';
+        case 'warning':
+          return '#f59e0b';
+        case 'success':
+          return '#22c55e';
+        default:
+          return '#3b82f6';
+      }
+    }};
+  border: 0.0625rem solid ${(props) => props.theme.border};
+  border-left-width: 0.25rem;
+  border-left-color: ${(props) => {
+    switch (props.$severity) {
+      case 'error':
+        return '#ef4444';
+      case 'warning':
+        return '#f59e0b';
+      case 'success':
+        return '#22c55e';
+      default:
+        return '#3b82f6';
+    }
   }};
 `;
 
-export const InsightCardWithMargin = styled(InsightCard)`
-  margin-top: 1.5rem;
+export const ChartContainer = styled.div`
+  width: 100%;
+  height: 18rem;
+  min-height: 12rem;
+
+  @media (max-width: 640px) {
+    height: 16rem;
+    min-height: 10rem;
+  }
+
+  /* Remover background cinza do hover nas barras do recharts */
+  .recharts-active-bar {
+    display: none !important;
+  }
+
+  .recharts-bar-rectangle:hover {
+    opacity: 0.8;
+  }
+
+  /* Remover qualquer background de hover do tooltip cursor */
+  .recharts-tooltip-cursor {
+    fill: transparent !important;
+    stroke: transparent !important;
+  }
+
+  /* Remover background de hover em gráficos de barras */
+  .recharts-bar .recharts-bar-rectangle {
+    cursor: pointer;
+  }
+
+  /* Remover overlay de hover */
+  .recharts-active-shape {
+    display: none !important;
+  }
+
+  /* Remover qualquer elemento de background de hover */
+  .recharts-reference-line,
+  .recharts-reference-area {
+    display: none;
+  }
+
+  /* Para gráficos de barras verticais - remover background de hover */
+  .recharts-cartesian-axis-tick-value {
+    fill: ${(props) => props.theme.textSecondary};
+  }
 `;
 
-export const WarningText = styled.span`
-  color: #f59e0b;
+export const CustomTooltipContainer = styled.div<{ $isDark: boolean }>`
+  background-color: ${(props) => (props.$isDark ? '#1e1e1e' : '#ffffff')};
+  border: 0.0625rem solid ${(props) => (props.$isDark ? '#2a2a2a' : '#e5e5e5')};
+  border-radius: 0.5rem;
+  padding: 0.75rem;
+  color: ${(props) => (props.$isDark ? '#ffffff' : '#111827')};
+  font-size: 0.875rem;
+  box-shadow: 0 0.25rem 0.5rem rgba(0, 0, 0, 0.1);
 `;
 
-export const HeatmapSection = styled.div`
-  margin-bottom: 2rem;
-`;
-
-export const HeatmapSectionTitle = styled.h3`
-  margin-bottom: 1rem;
-  font-size: 1.125rem;
-  font-weight: 600;
+export const TooltipLabel = styled.div`
   color: ${(props) => props.theme.text};
+  font-weight: 600;
+  margin-bottom: 0.25rem;
 `;
 
-export const HeatmapDayContainer = styled.div`
-  text-align: center;
+export const TooltipValue = styled.div`
+  color: ${(props) => props.theme.text};
+  font-weight: 500;
 `;

@@ -49,9 +49,6 @@ export const FormRow = styled.div`
   grid-template-columns: 1fr 1fr;
   gap: 1rem;
 
-  @media (max-width: 640px) {
-    grid-template-columns: 1fr;
-  }
 `;
 
 export const CheckboxGroup = styled.div`

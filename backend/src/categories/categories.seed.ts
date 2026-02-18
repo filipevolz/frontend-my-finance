@@ -43,6 +43,7 @@ export const categoriesSeed: Partial<Category>[] = [
   { name: 'Juros', type: CategoryType.EXPENSE, icon: 'Percent' },
   { name: 'Tarifas bancárias', type: CategoryType.EXPENSE, icon: 'Building' },
   { name: 'Empréstimos', type: CategoryType.EXPENSE, icon: 'Banknote' },
+  { name: 'Investimentos', type: CategoryType.EXPENSE, icon: 'TrendingUp' },
 
   // Expense Categories - Saúde
   { name: 'Plano de saúde', type: CategoryType.EXPENSE, icon: 'Heart' },

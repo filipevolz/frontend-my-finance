@@ -42,6 +42,10 @@ export const TransactionsMain = styled.main`
   max-width: 90rem;
   width: 100%;
   margin: 0 auto;
+
+  @media (max-width: 768px) {
+    padding: 1rem;
+  }
 `;
 
 export const TransactionsContent = styled.div`
@@ -56,12 +60,21 @@ export const PageTitle = styled.h1`
   font-weight: 700;
   margin: 0;
   transition: color 0.3s ease;
+
+  @media (max-width: 768px) {
+    font-size: 1.5rem;
+  }
 `;
 
 export const SearchAndFiltersContainer = styled.div`
   display: flex;
   gap: 1rem;
   align-items: center;
+  flex-wrap: wrap;
+
+  @media (max-width: 768px) {
+    gap: 0.75rem;
+  }
 `;
 
 export const SearchInputWrapper = styled.div`
@@ -106,6 +119,11 @@ export const FiltersGrid = styled.div`
   grid-template-columns: repeat(auto-fit, minmax(15rem, 1fr));
   gap: 1.5rem;
   margin-top: 1.5rem;
+
+  @media (max-width: 768px) {
+    grid-template-columns: 1fr;
+    gap: 1rem;
+  }
 `;
 
 export const FilterGroup = styled.div`
@@ -263,6 +281,11 @@ export const FiltersActionsContainer = styled.div`
   margin-top: 1.5rem;
   padding-top: 1.5rem;
   border-top: 0.0625rem solid ${(props) => props.theme.border};
+
+  @media (max-width: 768px) {
+    flex-direction: column-reverse;
+    gap: 0.5rem;
+  }
 `;
 
 export const TransactionsTable = styled.table`
@@ -273,6 +296,10 @@ export const TransactionsTable = styled.table`
   overflow: hidden;
   border: 0.0625rem solid ${(props) => props.theme.border};
   box-shadow: 0 0.0625rem 0.1875rem ${(props) => props.theme.shadow};
+
+  @media (max-width: 768px) {
+    display: none;
+  }
 `;
 
 export const TableHeader = styled.thead`
@@ -403,4 +430,86 @@ export const DatePickerButton = styled.button`
   padding: 0;
   cursor: pointer;
   width: 100%;
+`;
+
+export const TransactionsTableMobile = styled.div`
+  display: none;
+  flex-direction: column;
+  background-color: ${(props) => props.theme.surface};
+  border-radius: 0.75rem;
+  overflow: hidden;
+  border: 0.0625rem solid ${(props) => props.theme.border};
+  box-shadow: 0 0.0625rem 0.1875rem ${(props) => props.theme.shadow};
+  padding: 1rem;
+
+  @media (max-width: 768px) {
+    display: flex;
+  }
+`;
+
+export const TransactionsList = styled.ul`
+  display: flex;
+  flex-direction: column;
+  gap: 0.5rem;
+  list-style: none;
+  margin: 0;
+  padding: 0;
+`;
+
+export const TransactionItem = styled.li`
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 0.75rem;
+  border-top: 0.0625rem solid ${(props) => props.theme.border};
+  padding-top: 0.75rem;
+  padding-bottom: 0.75rem;
+
+  &:first-child {
+    border-top: none;
+    padding-top: 0;
+  }
+`;
+
+export const TransactionItemContent = styled.div`
+  display: flex;
+  flex-direction: column;
+  gap: 0.5rem;
+  flex: 1;
+`;
+
+export const TransactionItemHeader = styled.div`
+  display: flex;
+  align-items: center;
+  gap: 0.75rem;
+`;
+
+export const TransactionItemMeta = styled.div`
+  display: flex;
+  flex-direction: column;
+  gap: 0.25rem;
+`;
+
+export const TransactionItemRight = styled.div`
+  display: flex;
+  flex-direction: column;
+  align-items: flex-end;
+  gap: 0.5rem;
+  flex-shrink: 0;
+`;
+
+export const TransactionMobileDate = styled.div`
+  display: flex;
+  flex-direction: column;
+  gap: 0.25rem;
+  font-size: 0.75rem;
+  color: ${(props) => props.theme.textSecondary};
+`;
+
+export const TransactionMobileDateLabel = styled.span`
+  font-size: 0.625rem;
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+  color: ${(props) => props.theme.textSecondary};
+  opacity: 0.7;
 `;
