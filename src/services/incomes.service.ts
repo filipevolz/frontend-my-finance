@@ -138,6 +138,13 @@ export const incomesService = {
     return response.data;
   },
 
+  async getFirstTransactionDate(): Promise<{
+    data: { date: string | null };
+  }> {
+    const response = await api.get('/incomes/first-transaction-date');
+    return response.data;
+  },
+
   async getTransactions(filters?: {
     startDate?: Date;
     endDate?: Date;

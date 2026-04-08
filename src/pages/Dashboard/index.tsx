@@ -148,6 +148,56 @@ export function Dashboard() {
   >([]);
   const [isLoadingCategories, setIsLoadingCategories] = useState(false);
   const [isLoadingTransactions, setIsLoadingTransactions] = useState(false);
+  const [isUntilTodayFilterActive, setIsUntilTodayFilterActive] = useState(false);
+  const allTimeStartDate = new Date(2000, 0, 1, 12, 0, 0);
+
+  const parseDateOnlyToLocalDate = (dateInput: string | Date): Date => {
+    if (dateInput instanceof Date) {
+      return new Date(
+        dateInput.getFullYear(),
+        dateInput.getMonth(),
+        dateInput.getDate(),
+        12,
+        0,
+        0,
+      );
+    }
+
+    const safeDate = dateInput.includes('T')
+      ? dateInput.split('T')[0]
+      : dateInput;
+    const [year, month, day] = safeDate.split('-').map(Number);
+
+    if (!year || !month || !day) {
+      return allTimeStartDate;
+    }
+
+    return new Date(year, month - 1, day, 12, 0, 0);
+  };
+
+  const applyUntilTodayFilter = async () => {
+    try {
+      const response = await incomesService.getFirstTransactionDate();
+      const firstDate = response.data.date
+        ? parseDateOnlyToLocalDate(response.data.date)
+        : allTimeStartDate;
+
+      setSelectedPeriod(undefined);
+      setIsUntilTodayFilterActive(true);
+      setDateRange({
+        from: firstDate,
+        to: new Date(),
+      });
+    } catch (error) {
+      console.error('Erro ao buscar primeira transação:', error);
+      setSelectedPeriod(undefined);
+      setIsUntilTodayFilterActive(true);
+      setDateRange({
+        from: allTimeStartDate,
+        to: new Date(),
+      });
+    }
+  };
 
   useEffect(() => {
     if (!isLoading && !isAuthenticated) {
@@ -369,6 +419,7 @@ export function Dashboard() {
                 $active={selectedPeriod === 'this-month'}
                 onClick={() => {
                   setSelectedPeriod('this-month');
+                  setIsUntilTodayFilterActive(false);
                   setDateRange(undefined);
                 }}
               >
@@ -378,6 +429,7 @@ export function Dashboard() {
                 $active={selectedPeriod === 'last-month'}
                 onClick={() => {
                   setSelectedPeriod('last-month');
+                  setIsUntilTodayFilterActive(false);
                   setDateRange(undefined);
                 }}
               >
@@ -387,10 +439,17 @@ export function Dashboard() {
                 $active={selectedPeriod === 'this-year'}
                 onClick={() => {
                   setSelectedPeriod('this-year');
+                  setIsUntilTodayFilterActive(false);
                   setDateRange(undefined);
                 }}
               >
                 Este ano
+              </PeriodButton>
+              <PeriodButton
+                $active={isUntilTodayFilterActive}
+                onClick={() => void applyUntilTodayFilter()}
+              >
+                Até hoje
               </PeriodButton>
               <PeriodSelectWrapper>
                 <Popover>
@@ -417,6 +476,7 @@ export function Dashboard() {
                       selected={dateRange}
                       onSelect={(range) => {
                         setDateRange(range);
+                        setIsUntilTodayFilterActive(false);
                         if (range?.from && range?.to) {
                           setSelectedPeriod(undefined);
                         }
@@ -432,6 +492,7 @@ export function Dashboard() {
                     type="button"
                     onClick={() => {
                       setDateRange(undefined);
+                      setIsUntilTodayFilterActive(false);
                     }}
                     aria-label="Limpar filtro de datas"
                   >
